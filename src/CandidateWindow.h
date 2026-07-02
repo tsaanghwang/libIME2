@@ -58,9 +58,9 @@ public:
         return items_;
     }
 
-    void setItems(const std::vector<std::wstring>& items, const std::vector<wchar_t>& sekKeys) {
+    void setItems(const std::vector<std::wstring>& items, const std::vector<wchar_t>& selKeys) {
         items_ = items;
-        selKeys_ = selKeys_;
+        selKeys_ = selKeys;
         recalculateSize();
         refresh();
     }
