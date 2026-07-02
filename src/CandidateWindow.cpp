@@ -41,6 +41,7 @@ CandidateWindow::CandidateWindow(TextService* service, EditSession* session):
     currentSel_(0),
     hasResult_(false),
     useCursor_(true),
+    trackingCandidateClick_(false),
     selKeyWidth_(0) {
 
     if(service->isImmersive()) { // windows 8 app mode
@@ -235,6 +236,42 @@ void CandidateWindow::onPaint(WPARAM wp, LPARAM lp) {
     EndPaint(hwnd_, &ps);
 }
 
+void CandidateWindow::onLButtonDown(WPARAM wp, LPARAM lp) {
+    int item = itemFromPoint(MAKEPOINTS(lp));
+    trackingCandidateClick_ = item >= 0;
+    if(trackingCandidateClick_) {
+        setCurrentSel(item);
+        SetCapture(hwnd_);
+        return;
+    }
+    ImeWindow::onLButtonDown(wp, lp);
+}
+
+void CandidateWindow::onLButtonUp(WPARAM wp, LPARAM lp) {
+    if(trackingCandidateClick_) {
+        ReleaseCapture();
+        trackingCandidateClick_ = false;
+        int item = itemFromPoint(MAKEPOINTS(lp));
+        if(item >= 0) {
+            setCurrentSel(item);
+            textService_->onCandidateSelected(currentSel_);
+        }
+        return;
+    }
+    ImeWindow::onLButtonUp(wp, lp);
+}
+
+void CandidateWindow::onMouseMove(WPARAM wp, LPARAM lp) {
+    if(trackingCandidateClick_) {
+        int item = itemFromPoint(MAKEPOINTS(lp));
+        if(item >= 0) {
+            setCurrentSel(item);
+        }
+        return;
+    }
+    ImeWindow::onMouseMove(wp, lp);
+}
+
 void CandidateWindow::recalculateSize() {
     if(items_.empty()) {
         resize(margin_ * 2, margin_ * 2);
@@ -318,6 +355,7 @@ bool CandidateWindow::filterKeyEvent(KeyEvent& keyEvent) {
             ++currentSel_;
         break;
     case VK_RETURN:
+    case VK_SPACE:
         hasResult_ = true;
         return true;
     default:
@@ -364,27 +402,23 @@ void CandidateWindow::paintItem(HDC hDC, int i,  int x, int y) {
     wchar_t selKey[] = L"?. ";
     selKey[0] = selKeys_[i];
     textRect.right = textRect.left + selKeyWidth_;
-    // FIXME: make the color of strings configurable.
-    COLORREF selKeyColor = RGB(0, 0, 255);
-    COLORREF oldColor = ::SetTextColor(hDC, selKeyColor);
+    bool selected = useCursor_ && i == currentSel_;
+    COLORREF oldColor = ::SetTextColor(hDC, selected ? GetSysColor(COLOR_HIGHLIGHTTEXT) : RGB(0, 0, 255));
+    COLORREF oldBkColor = ::SetBkColor(hDC, selected ? GetSysColor(COLOR_HIGHLIGHT) : GetSysColor(COLOR_WINDOW));
     // paint the selection key
     ::ExtTextOut(hDC, textRect.left, textRect.top, ETO_OPAQUE, &textRect, selKey, 3, NULL);
-    ::SetTextColor(hDC, oldColor); // restore text color
 
     // paint the candidate string
     wstring& item = items_.at(i);
     textRect.left += selKeyWidth_;
     textRect.right = textRect.left + textWidth_;
+    if(!selected)
+        ::SetTextColor(hDC, GetSysColor(COLOR_WINDOWTEXT));
     // paint the candidate string
     ::ExtTextOut(hDC, textRect.left, textRect.top, ETO_OPAQUE, &textRect, item.c_str(), item.length(), NULL);
 
-    if(useCursor_ && i == currentSel_) { // invert the selected item
-        int left = textRect.left; // - selKeyWidth_;
-        int top = textRect.top;
-        int width = textRect.right - left;
-        int height = itemHeight_;
-        ::BitBlt(hDC, left, top, width, itemHeight_, hDC, left, top, NOTSRCCOPY);
-    }
+    ::SetTextColor(hDC, oldColor);
+    ::SetBkColor(hDC, oldBkColor);
 }
 
 void CandidateWindow::itemRect(int i, RECT& rect) {
@@ -395,6 +429,17 @@ void CandidateWindow::itemRect(int i, RECT& rect) {
     rect.top = margin_ + row * (itemHeight_ + rowSpacing_);
     rect.right = rect.left + (selKeyWidth_ + textWidth_);
     rect.bottom = rect.top + itemHeight_;
+}
+
+int CandidateWindow::itemFromPoint(POINTS pt) {
+    for(int i = 0, n = items_.size(); i < n; ++i) {
+        RECT rect;
+        itemRect(i, rect);
+        if(pt.x >= rect.left && pt.x < rect.right && pt.y >= rect.top && pt.y < rect.bottom) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 

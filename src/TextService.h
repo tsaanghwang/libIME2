@@ -178,6 +178,9 @@ public:
     // called when a language button or menu item is clicked
     virtual bool onCommand(UINT id, CommandType type);
 
+    // called when an item in the candidate window is selected with mouse or keyboard
+    virtual bool onCandidateSelected(int index);
+
     // called when a value in the global or thread compartment changed.
     virtual void onCompartmentChanged(const GUID& key);
 

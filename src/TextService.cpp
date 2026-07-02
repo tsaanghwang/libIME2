@@ -464,6 +464,11 @@ bool TextService::onCommand(UINT id, CommandType type) {
 }
 
 // virtual
+bool TextService::onCandidateSelected(int index) {
+    return false;
+}
+
+// virtual
 void TextService::onCompartmentChanged(const GUID& key) {
     // keyboard status changed, this is threadMgr specific
     // See explanations on TSF aware blog:

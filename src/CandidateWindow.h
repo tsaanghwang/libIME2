@@ -93,6 +93,9 @@ public:
     bool hasResult() const {
         return hasResult_;
     }
+    void clearResult() {
+        hasResult_ = false;
+    }
 
     bool useCursor() const {
         return useCursor_;
@@ -103,8 +106,12 @@ public:
 protected:
     LRESULT wndProc(UINT msg, WPARAM wp , LPARAM lp);
     void onPaint(WPARAM wp, LPARAM lp);
+    void onLButtonDown(WPARAM wp, LPARAM lp);
+    void onLButtonUp(WPARAM wp, LPARAM lp);
+    void onMouseMove(WPARAM wp, LPARAM lp);
     void paintItem(HDC hDC, int i, int x, int y);
     void itemRect(int i, RECT& rect);
+    int itemFromPoint(POINTS pt);
 
 protected: // COM object should not be deleted directly. calling Release() instead.
     ~CandidateWindow(void);
@@ -123,6 +130,7 @@ private:
     int currentSel_;
     bool hasResult_;
     bool useCursor_;
+    bool trackingCandidateClick_;
 };
 
 }
