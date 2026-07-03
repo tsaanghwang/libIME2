@@ -229,7 +229,7 @@ void CandidateWindow::onPaint(WPARAM wp, LPARAM lp) {
             y += itemHeight_ + rowSpacing_;
         }
         else {
-            x += colSpacing_ + selKeyWidth_ + textWidth_;
+            x += colSpacing_ + selKeyWidth_ + itemWidths_[i];
         }
     }
     SelectObject(hDC, oldFont);
@@ -275,6 +275,7 @@ void CandidateWindow::onMouseMove(WPARAM wp, LPARAM lp) {
 void CandidateWindow::recalculateSize() {
     if(items_.empty()) {
         resize(margin_ * 2, margin_ * 2);
+        return;
     }
 
     HDC hDC = ::GetWindowDC(hwnd());
@@ -283,6 +284,8 @@ void CandidateWindow::recalculateSize() {
     selKeyWidth_ = 0;
     textWidth_ = 0;
     itemHeight_ = 0;
+    itemWidths_.clear();
+    itemWidths_.reserve(items_.size());
 
     HGDIOBJ oldFont = ::SelectObject(hDC, font_);
     vector<wstring>::const_iterator it;
@@ -300,6 +303,7 @@ void CandidateWindow::recalculateSize() {
         SIZE candidateSize;
         wstring& item = items_.at(i);
         ::GetTextExtentPoint32W(hDC, item.c_str(), item.length(), &candidateSize);
+        itemWidths_.push_back(candidateSize.cx);
         if(candidateSize.cx > textWidth_)
             textWidth_ = candidateSize.cx;
         int itemHeight = max(candidateSize.cy, selKeySize.cy);
@@ -309,21 +313,23 @@ void CandidateWindow::recalculateSize() {
     ::SelectObject(hDC, oldFont);
     ::ReleaseDC(hwnd(), hDC);
 
-    if(items_.size() <= candPerRow_) {
-        width = items_.size() * (selKeyWidth_ + textWidth_);
-        width += colSpacing_ * (items_.size() - 1);
-        width += margin_ * 2;
-        height = itemHeight_ + margin_ * 2;
-    }
-    else {
-        width = candPerRow_ * (selKeyWidth_ + textWidth_);
-        width += colSpacing_ * (candPerRow_ - 1);
-        width += margin_ * 2;
-        int rowCount = items_.size() / candPerRow_;
-        if(items_.size() % candPerRow_)
+    int rowWidth = margin_ * 2;
+    int rowCount = 1;
+    for(int i = 0, n = items_.size(); i < n; ++i) {
+        if(i > 0 && i % candPerRow_ == 0) {
+            if(rowWidth > width)
+                width = rowWidth;
+            rowWidth = margin_ * 2;
             ++rowCount;
-        height = itemHeight_ * rowCount + rowSpacing_ * (rowCount - 1) + margin_ * 2;
+        }
+        else if(i % candPerRow_ > 0) {
+            rowWidth += colSpacing_;
+        }
+        rowWidth += selKeyWidth_ + itemWidths_[i];
     }
+    if(rowWidth > width)
+        width = rowWidth;
+    height = itemHeight_ * rowCount + rowSpacing_ * (rowCount - 1) + margin_ * 2;
     resize(width, height);
 }
 
@@ -387,6 +393,7 @@ void CandidateWindow::setCurrentSel(int sel) {
 void CandidateWindow::clear() {
     items_.clear();
     selKeys_.clear();
+    itemWidths_.clear();
     currentSel_ = 0;
     hasResult_ = false;
 }
@@ -411,7 +418,7 @@ void CandidateWindow::paintItem(HDC hDC, int i,  int x, int y) {
     // paint the candidate string
     wstring& item = items_.at(i);
     textRect.left += selKeyWidth_;
-    textRect.right = textRect.left + textWidth_;
+    textRect.right = textRect.left + itemWidths_[i];
     if(!selected)
         ::SetTextColor(hDC, GetSysColor(COLOR_WINDOWTEXT));
     // paint the candidate string
@@ -425,9 +432,13 @@ void CandidateWindow::itemRect(int i, RECT& rect) {
     int row, col;
     row = i / candPerRow_;
     col = i % candPerRow_;
-    rect.left = margin_ + col * (selKeyWidth_ + textWidth_ + colSpacing_);
+    rect.left = margin_;
+    int first = row * candPerRow_;
+    for(int j = first; j < i; ++j) {
+        rect.left += selKeyWidth_ + itemWidths_[j] + colSpacing_;
+    }
     rect.top = margin_ + row * (itemHeight_ + rowSpacing_);
-    rect.right = rect.left + (selKeyWidth_ + textWidth_);
+    rect.right = rect.left + (selKeyWidth_ + itemWidths_[i]);
     rect.bottom = rect.top + itemHeight_;
 }
 

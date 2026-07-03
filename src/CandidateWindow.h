@@ -127,6 +127,7 @@ private:
     int rowSpacing_;
     std::vector<wchar_t> selKeys_;
     std::vector<std::wstring> items_;
+    std::vector<int> itemWidths_;
     int currentSel_;
     bool hasResult_;
     bool useCursor_;
