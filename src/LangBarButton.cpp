@@ -56,9 +56,10 @@ const wchar_t* LangBarButton::text() const {
 }
 
 void LangBarButton::setText(const wchar_t* text) {
+    wchar_t newDesc[TF_LBI_DESC_MAXLEN];
     if (text && text[0] != '\0') {
-        wcsncpy(info_.szDescription, text, TF_LBI_DESC_MAXLEN - 1);
-        info_.szDescription[TF_LBI_DESC_MAXLEN - 1] = 0;
+        wcsncpy(newDesc, text, TF_LBI_DESC_MAXLEN - 1);
+        newDesc[TF_LBI_DESC_MAXLEN - 1] = 0;
     }
     else {
         // NOTE: The language button text should NOT be empty.
@@ -67,8 +68,13 @@ void LangBarButton::setText(const wchar_t* text) {
         // This can be considered a bug of Windows 10 and there does not seem to be a way to fix it.
         // So we need to avoid empty button text otherwise the language button won't work properly.
         // Here we use a space character to make the text non-empty to workaround the problem.
-        wcscpy(info_.szDescription, L" ");
+        wcscpy(newDesc, L" ");
     }
+    if (wcsncmp(info_.szDescription, newDesc, TF_LBI_DESC_MAXLEN) == 0) {
+        return;
+    }
+    wcsncpy(info_.szDescription, newDesc, TF_LBI_DESC_MAXLEN - 1);
+    info_.szDescription[TF_LBI_DESC_MAXLEN - 1] = 0;
     update(TF_LBI_TEXT);
 }
 
@@ -113,6 +119,9 @@ HICON LangBarButton::icon() const {
 // That means, when the button is destroyed, it will not destroy
 // the icon automatically.
 void LangBarButton::setIcon(HICON icon) {
+    if (icon_ == icon) {
+        return;
+    }
     icon_ = icon;
     update(TF_LBI_ICON);
 }

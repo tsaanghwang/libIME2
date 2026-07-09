@@ -152,6 +152,9 @@ HRESULT ImeModule::registerLangProfiles(LangProfileInfo* langs, int langsCount) 
                 }
                 if (lcid != 0) {
                     LANGID langId = LANGIDFROMLCID(lcid);
+                    // Remove any stale profile first so re-registering picks up
+                    // updated display names from ime.json without a full uninstall.
+                    inputProcessProfiles->RemoveLanguageProfile(textServiceClsid_, langId, lang.profileGuid);
                     if (inputProcessProfiles->AddLanguageProfile(textServiceClsid_, langId, lang.profileGuid,
                         lang.name.c_str(), lang.name.length(), lang.iconFile.empty() ? NULL : lang.iconFile.c_str(),
                         lang.iconFile.length(), lang.iconIndex) != S_OK) {
