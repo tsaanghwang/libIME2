@@ -55,6 +55,31 @@ const wchar_t* LangBarButton::text() const {
     return info_.szDescription;
 }
 
+void LangBarButton::refreshAppearance(const wchar_t* text, HICON icon) {
+    DWORD flags = 0;
+    if (text) {
+        wchar_t newDesc[TF_LBI_DESC_MAXLEN];
+        if (text[0] != '\0') {
+            wcsncpy(newDesc, text, TF_LBI_DESC_MAXLEN - 1);
+            newDesc[TF_LBI_DESC_MAXLEN - 1] = 0;
+        } else {
+            wcscpy(newDesc, L" ");
+        }
+        if (wcsncmp(info_.szDescription, newDesc, TF_LBI_DESC_MAXLEN) != 0) {
+            wcsncpy(info_.szDescription, newDesc, TF_LBI_DESC_MAXLEN - 1);
+            info_.szDescription[TF_LBI_DESC_MAXLEN - 1] = 0;
+            flags |= TF_LBI_TEXT;
+        }
+    }
+    if (icon && icon_ != icon) {
+        icon_ = icon;
+        flags |= TF_LBI_ICON;
+    }
+    if (flags) {
+        update(flags);
+    }
+}
+
 void LangBarButton::setText(const wchar_t* text) {
     wchar_t newDesc[TF_LBI_DESC_MAXLEN];
     if (text && text[0] != '\0') {

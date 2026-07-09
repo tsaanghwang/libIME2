@@ -75,6 +75,8 @@ public:
     DWORD style() const;
     void setStyle(DWORD style);
 
+    void refreshAppearance(const wchar_t* text, HICON icon);
+
     // COM-related stuff
 
     // ITfLangBarItem
