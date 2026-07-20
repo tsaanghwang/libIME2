@@ -58,16 +58,18 @@ public:
         return items_;
     }
 
-    void setItems(const std::vector<std::wstring>& items, const std::vector<wchar_t>& selKeys) {
+    void setItems(const std::vector<std::wstring>& items, const std::vector<wchar_t>& selKeys, const std::vector<std::wstring>& selLabels = {}) {
         items_ = items;
         selKeys_ = selKeys;
+        selLabels_ = selLabels;
         recalculateSize();
         refresh();
     }
 
-    void add(std::wstring item, wchar_t selKey) {
+    void add(std::wstring item, wchar_t selKey, std::wstring selLabel = std::wstring()) {
         items_.push_back(item);
         selKeys_.push_back(selKey);
+        selLabels_.push_back(selLabel);
     }
 
     void clear();
@@ -126,6 +128,7 @@ private:
     int colSpacing_;
     int rowSpacing_;
     std::vector<wchar_t> selKeys_;
+    std::vector<std::wstring> selLabels_;
     std::vector<std::wstring> items_;
     std::vector<int> itemWidths_;
     int currentSel_;

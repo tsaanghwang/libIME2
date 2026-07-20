@@ -293,9 +293,12 @@ void CandidateWindow::recalculateSize() {
         SIZE selKeySize;
         int lineHeight = 0;
         // the selection key string
-        wchar_t selKey[] = L"?. ";
-        selKey[0] = selKeys_[i];
-        ::GetTextExtentPoint32W(hDC, selKey, 3, &selKeySize);
+        std::wstring selLabel;
+        if(i < selLabels_.size() && !selLabels_[i].empty())
+            selLabel = selLabels_[i] + L" ";
+        else
+            selLabel = std::wstring(1, selKeys_[i]) + L". ";
+        ::GetTextExtentPoint32W(hDC, selLabel.c_str(), static_cast<int>(selLabel.length()), &selKeySize);
         if(selKeySize.cx > selKeyWidth_)
             selKeyWidth_ = selKeySize.cx;
 
@@ -393,6 +396,7 @@ void CandidateWindow::setCurrentSel(int sel) {
 void CandidateWindow::clear() {
     items_.clear();
     selKeys_.clear();
+    selLabels_.clear();
     itemWidths_.clear();
     currentSel_ = 0;
     hasResult_ = false;
@@ -406,14 +410,17 @@ void CandidateWindow::setUseCursor(bool use) {
 
 void CandidateWindow::paintItem(HDC hDC, int i,  int x, int y) {
     RECT textRect = {x, y, 0, y + itemHeight_};
-    wchar_t selKey[] = L"?. ";
-    selKey[0] = selKeys_[i];
+    std::wstring selLabel;
+    if(i < selLabels_.size() && !selLabels_[i].empty())
+        selLabel = selLabels_[i] + L" ";
+    else
+        selLabel = std::wstring(1, selKeys_[i]) + L". ";
     textRect.right = textRect.left + selKeyWidth_;
     bool selected = useCursor_ && i == currentSel_;
     COLORREF oldColor = ::SetTextColor(hDC, selected ? GetSysColor(COLOR_HIGHLIGHTTEXT) : RGB(0, 0, 255));
     COLORREF oldBkColor = ::SetBkColor(hDC, selected ? GetSysColor(COLOR_HIGHLIGHT) : GetSysColor(COLOR_WINDOW));
     // paint the selection key
-    ::ExtTextOut(hDC, textRect.left, textRect.top, ETO_OPAQUE, &textRect, selKey, 3, NULL);
+    ::ExtTextOut(hDC, textRect.left, textRect.top, ETO_OPAQUE, &textRect, selLabel.c_str(), static_cast<UINT>(selLabel.length()), NULL);
 
     // paint the candidate string
     wstring& item = items_.at(i);
