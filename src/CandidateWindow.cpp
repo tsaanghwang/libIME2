@@ -18,6 +18,8 @@
 //
 
 #include "CandidateWindow.h"
+#include "CandidateWindowClickPolicy.h"
+#include "CompositionSegmentStrip.h"
 #include "DrawUtils.h"
 #include "TextService.h"
 #include "EditSession.h"
@@ -42,6 +44,10 @@ CandidateWindow::CandidateWindow(TextService* service, EditSession* session):
     hasResult_(false),
     useCursor_(true),
     trackingCandidateClick_(false),
+    trackingCompositionSegmentClick_(false),
+    trackedCompositionSegment_(-1),
+    compositionLabelWidth_(0),
+    compositionStripHeight_(0),
     selKeyWidth_(0) {
 
     if(service->isImmersive()) { // windows 8 app mode
@@ -56,7 +62,8 @@ CandidateWindow::CandidateWindow(TextService* service, EditSession* session):
     }
 
     HWND parent = service->compositionWindow(session);
-    create(parent, WS_POPUP|WS_CLIPCHILDREN, WS_EX_TOOLWINDOW|WS_EX_TOPMOST);
+    create(parent, WS_POPUP|WS_CLIPCHILDREN,
+        WS_EX_TOOLWINDOW|WS_EX_TOPMOST|WS_EX_NOACTIVATE);
 }
 
 CandidateWindow::~CandidateWindow(void) {
@@ -217,9 +224,11 @@ void CandidateWindow::onPaint(WPARAM wp, LPARAM lp) {
         ::Draw3DBorder(hDC, &rc, GetSysColor(COLOR_3DFACE), 0);
     }
 
-    // paint items
+    paintCompositionSegments(hDC);
+
+    // paint candidate items
     int col = 0;
-    int x = margin_, y = margin_;
+    int x = margin_, y = candidateRowsTop();
     for(int i = 0, n = items_.size(); i < n; ++i) {
         paintItem(hDC, i, x, y);
         ++col; // go to next column
@@ -237,10 +246,16 @@ void CandidateWindow::onPaint(WPARAM wp, LPARAM lp) {
 }
 
 void CandidateWindow::onLButtonDown(WPARAM wp, LPARAM lp) {
-    int item = itemFromPoint(MAKEPOINTS(lp));
-    trackingCandidateClick_ = item >= 0;
-    if(trackingCandidateClick_) {
-        setCurrentSel(item);
+    POINTS point = MAKEPOINTS(lp);
+    const auto target = candidateWindowClickTarget(
+        compositionSegmentFromPoint(point), itemFromPoint(point));
+    trackingCompositionSegmentClick_ =
+        target.kind == CandidateWindowClickKind::CompositionSegment;
+    trackingCandidateClick_ = target.kind == CandidateWindowClickKind::Candidate;
+    trackedCompositionSegment_ = trackingCompositionSegmentClick_ ? target.index : -1;
+    if(trackingCandidateClick_)
+        setCurrentSel(target.index);
+    if(trackingCompositionSegmentClick_ || trackingCandidateClick_) {
         SetCapture(hwnd_);
         return;
     }
@@ -248,6 +263,17 @@ void CandidateWindow::onLButtonDown(WPARAM wp, LPARAM lp) {
 }
 
 void CandidateWindow::onLButtonUp(WPARAM wp, LPARAM lp) {
+    if(trackingCompositionSegmentClick_) {
+        ReleaseCapture();
+        trackingCompositionSegmentClick_ = false;
+        int segment = compositionSegmentFromPoint(MAKEPOINTS(lp));
+        if(segment >= 0 && segment == trackedCompositionSegment_)
+            textService_->onCompositionSegmentSelected(
+                compositionSegmentStarts_[segment],
+                compositionSegmentEnds_[segment]);
+        trackedCompositionSegment_ = -1;
+        return;
+    }
     if(trackingCandidateClick_) {
         ReleaseCapture();
         trackingCandidateClick_ = false;
@@ -262,6 +288,8 @@ void CandidateWindow::onLButtonUp(WPARAM wp, LPARAM lp) {
 }
 
 void CandidateWindow::onMouseMove(WPARAM wp, LPARAM lp) {
+    if(trackingCompositionSegmentClick_)
+        return;
     if(trackingCandidateClick_) {
         int item = itemFromPoint(MAKEPOINTS(lp));
         if(item >= 0) {
@@ -273,7 +301,7 @@ void CandidateWindow::onMouseMove(WPARAM wp, LPARAM lp) {
 }
 
 void CandidateWindow::recalculateSize() {
-    if(items_.empty()) {
+    if(items_.empty() && compositionCells_.empty()) {
         resize(margin_ * 2, margin_ * 2);
         return;
     }
@@ -286,6 +314,8 @@ void CandidateWindow::recalculateSize() {
     itemHeight_ = 0;
     itemWidths_.clear();
     itemWidths_.reserve(items_.size());
+    compositionCellWidths_.clear();
+    compositionCellWidths_.reserve(compositionCells_.size());
 
     HGDIOBJ oldFont = ::SelectObject(hDC, font_);
     vector<wstring>::const_iterator it;
@@ -313,11 +343,25 @@ void CandidateWindow::recalculateSize() {
         if(itemHeight > itemHeight_)
             itemHeight_ = itemHeight;
     }
+
+    SIZE labelSize = {};
+    const wchar_t* compositionLabel = L"\x7ec4\x53e5 ";
+    ::GetTextExtentPoint32W(hDC, compositionLabel, 3, &labelSize);
+    compositionLabelWidth_ = labelSize.cx;
+    compositionStripHeight_ = labelSize.cy + 6;
+    int compositionWidth = margin_ * 2 + compositionLabelWidth_;
+    for(const auto& cell : compositionCells_) {
+        SIZE cellSize = {};
+        ::GetTextExtentPoint32W(hDC, cell.c_str(), static_cast<int>(cell.length()), &cellSize);
+        int cellWidth = max(cellSize.cx + 8, compositionStripHeight_);
+        compositionCellWidths_.push_back(cellWidth);
+        compositionWidth += cellWidth;
+    }
     ::SelectObject(hDC, oldFont);
     ::ReleaseDC(hwnd(), hDC);
 
     int rowWidth = margin_ * 2;
-    int rowCount = 1;
+    int rowCount = items_.empty() ? 0 : 1;
     for(int i = 0, n = items_.size(); i < n; ++i) {
         if(i > 0 && i % candPerRow_ == 0) {
             if(rowWidth > width)
@@ -332,8 +376,37 @@ void CandidateWindow::recalculateSize() {
     }
     if(rowWidth > width)
         width = rowWidth;
-    height = itemHeight_ * rowCount + rowSpacing_ * (rowCount - 1) + margin_ * 2;
+    width = max(width, compositionWidth);
+    height = margin_ * 2;
+    if(!compositionCells_.empty())
+        height += compositionStripHeight_;
+    if(rowCount > 0) {
+        if(!compositionCells_.empty())
+            height += rowSpacing_;
+        height += itemHeight_ * rowCount + rowSpacing_ * (rowCount - 1);
+    }
     resize(width, height);
+}
+
+void CandidateWindow::setCompositionSegments(
+    const std::vector<CompositionSegmentItem>& segments) {
+    compositionCells_.clear();
+    compositionSegmentStarts_.clear();
+    compositionSegmentEnds_.clear();
+    compositionSegmentActive_.clear();
+    for(const auto& segment : segments) {
+        std::wstring label = segment.text;
+        if(!segment.code.empty()) {
+            label += L"  ";
+            label += segment.code;
+        }
+        compositionCells_.push_back(std::move(label));
+        compositionSegmentStarts_.push_back(segment.start);
+        compositionSegmentEnds_.push_back(segment.end);
+        compositionSegmentActive_.push_back(segment.active);
+    }
+    recalculateSize();
+    refresh();
 }
 
 void CandidateWindow::setCandPerRow(int n) {
@@ -435,6 +508,32 @@ void CandidateWindow::paintItem(HDC hDC, int i,  int x, int y) {
     ::SetBkColor(hDC, oldBkColor);
 }
 
+void CandidateWindow::paintCompositionSegments(HDC hDC) {
+    if(compositionCells_.empty())
+        return;
+    RECT labelRect = {
+        margin_, margin_, margin_ + compositionLabelWidth_, margin_ + compositionStripHeight_
+    };
+    ::DrawTextW(hDC, L"\x7ec4\x53e5", 2, &labelRect, DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    for(int i = 0; i < static_cast<int>(compositionCells_.size()); ++i) {
+        RECT rect;
+        compositionSegmentRect(i, rect);
+        bool active = compositionSegmentActive_[i];
+        ::SetTextColor(hDC, GetSysColor(active ? COLOR_HIGHLIGHTTEXT : COLOR_BTNTEXT));
+        ::SetBkColor(hDC, GetSysColor(active ? COLOR_HIGHLIGHT : COLOR_BTNFACE));
+        ::ExtTextOutW(hDC, rect.left, rect.top + 3, ETO_OPAQUE, &rect,
+            compositionCells_[i].c_str(),
+            static_cast<UINT>(compositionCells_[i].length()), NULL);
+        ::FrameRect(hDC, &rect, (HBRUSH)::GetStockObject(GRAY_BRUSH));
+    }
+    ::SetTextColor(hDC, GetSysColor(COLOR_WINDOWTEXT));
+    ::SetBkColor(hDC, GetSysColor(COLOR_WINDOW));
+}
+
+int CandidateWindow::candidateRowsTop() const {
+    return margin_ + (compositionCells_.empty() ? 0 : compositionStripHeight_ + rowSpacing_);
+}
+
 void CandidateWindow::itemRect(int i, RECT& rect) {
     int row, col;
     row = i / candPerRow_;
@@ -444,9 +543,28 @@ void CandidateWindow::itemRect(int i, RECT& rect) {
     for(int j = first; j < i; ++j) {
         rect.left += selKeyWidth_ + itemWidths_[j] + colSpacing_;
     }
-    rect.top = margin_ + row * (itemHeight_ + rowSpacing_);
+    rect.top = candidateRowsTop() + row * (itemHeight_ + rowSpacing_);
     rect.right = rect.left + (selKeyWidth_ + itemWidths_[i]);
     rect.bottom = rect.top + itemHeight_;
+}
+
+void CandidateWindow::compositionSegmentRect(int i, RECT& rect) {
+    rect.left = margin_ + compositionLabelWidth_;
+    for(int j = 0; j < i; ++j)
+        rect.left += compositionCellWidths_[j];
+    rect.top = margin_;
+    rect.right = rect.left + compositionCellWidths_[i];
+    rect.bottom = rect.top + compositionStripHeight_;
+}
+
+int CandidateWindow::compositionSegmentFromPoint(POINTS pt) {
+    for(int i = 0; i < static_cast<int>(compositionCells_.size()); ++i) {
+        RECT rect;
+        compositionSegmentRect(i, rect);
+        if(pt.x >= rect.left && pt.x < rect.right && pt.y >= rect.top && pt.y < rect.bottom)
+            return i;
+    }
+    return -1;
 }
 
 int CandidateWindow::itemFromPoint(POINTS pt) {

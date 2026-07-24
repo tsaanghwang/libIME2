@@ -469,6 +469,11 @@ bool TextService::onCandidateSelected(int index) {
 }
 
 // virtual
+bool TextService::onCompositionSegmentSelected(int start, int end) {
+    return false;
+}
+
+// virtual
 void TextService::onCompartmentChanged(const GUID& key) {
     // keyboard status changed, this is threadMgr specific
     // See explanations on TSF aware blog:

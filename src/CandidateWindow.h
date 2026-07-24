@@ -21,6 +21,7 @@
 #define IME_CANDIDATE_WINDOW_H
 
 #include "ImeWindow.h"
+#include "CompositionSegmentStrip.h"
 #include <string>
 #include <vector>
 #include "ComObject.h"
@@ -73,6 +74,7 @@ public:
     }
 
     void clear();
+    void setCompositionSegments(const std::vector<CompositionSegmentItem>& segments);
 
     int candPerRow() const {
         return candPerRow_;
@@ -112,8 +114,12 @@ protected:
     void onLButtonUp(WPARAM wp, LPARAM lp);
     void onMouseMove(WPARAM wp, LPARAM lp);
     void paintItem(HDC hDC, int i, int x, int y);
+    void paintCompositionSegments(HDC hDC);
     void itemRect(int i, RECT& rect);
     int itemFromPoint(POINTS pt);
+    void compositionSegmentRect(int i, RECT& rect);
+    int compositionSegmentFromPoint(POINTS pt);
+    int candidateRowsTop() const;
 
 protected: // COM object should not be deleted directly. calling Release() instead.
     ~CandidateWindow(void);
@@ -135,6 +141,15 @@ private:
     bool hasResult_;
     bool useCursor_;
     bool trackingCandidateClick_;
+    bool trackingCompositionSegmentClick_;
+    int trackedCompositionSegment_;
+    std::vector<std::wstring> compositionCells_;
+    std::vector<int> compositionCellWidths_;
+    std::vector<int> compositionSegmentStarts_;
+    std::vector<int> compositionSegmentEnds_;
+    std::vector<bool> compositionSegmentActive_;
+    int compositionLabelWidth_;
+    int compositionStripHeight_;
 };
 
 }
