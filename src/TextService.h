@@ -181,6 +181,9 @@ public:
     // called when an item in the candidate window is selected with mouse or keyboard
     virtual bool onCandidateSelected(int index);
 
+    // called when a code point in the owned composition-segment strip is clicked
+    virtual bool onCompositionSegmentSelected(int start, int end);
+
     // called when a value in the global or thread compartment changed.
     virtual void onCompartmentChanged(const GUID& key);
 

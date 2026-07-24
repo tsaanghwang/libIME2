@@ -38,6 +38,8 @@ add_library(libIME2_static STATIC
     ImeWindow.h
     MessageWindow.cpp
     MessageWindow.h
+    CandidateWindowClickPolicy.h
+    CompositionSegmentStrip.h
     CandidateWindow.h
     CandidateWindow.cpp
 )
